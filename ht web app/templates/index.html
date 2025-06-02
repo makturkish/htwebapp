@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hyperthyroid Prediction UI - Multi-Model</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        html {
+            overflow-y: auto; /* Ensures main page vertical scrollbar appears when needed */
+            scroll-behavior: smooth;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6; /* Light gray background for the page */
+        }
+        .container {
+            max-width: 90%; 
+            margin: 2rem auto;
+            padding: 2rem;
+            background-color: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+        }
+        .file-input-label {
+            border: 2px dashed #cbd5e1; padding: 2rem; text-align: center; cursor: pointer;
+            border-radius: 8px; transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out;
+            background-color: #f9fafb;
+        }
+        .file-input-label:hover { background-color: #f3f4f6; border-color: #94a3b8; }
+        .file-input-text { color: #374151; } /* Darker text */
+        .file-name { margin-top: 0.75rem; font-style: italic; color: #4b5563; font-size: 0.9rem; }
+        .btn-predict {
+            background-color: #2563eb; /* Darker blue */ color: white; font-weight: 600; padding: 0.75rem 1.5rem;
+            border-radius: 8px; transition: background-color 0.2s ease-in-out, transform 0.1s ease;
+            box-shadow: 0 4px 10px rgba(37, 99, 235, 0.25);
+            width: 100%;
+        }
+        .btn-predict:hover { background-color: #1d4ed8; transform: translateY(-1px); }
+        .btn-predict:active { transform: translateY(0px); }
+        .btn-predict:disabled { background-color: #9ca3af; cursor: not-allowed; box-shadow: none; transform: none; }
+        
+        .results-table-container, .metrics-table-container { 
+            overflow-x: auto; 
+            max-height: 60vh; /* Increased max height */
+            overflow-y: auto; 
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            margin-top: 1rem;
+        }
+        
+        .results-table, .confusion-matrix-table {
+            width: 100%; border-collapse: collapse; font-size: 0.875rem; /* Slightly smaller font */
+        }
+        .results-table th, .results-table td,
+        .confusion-matrix-table th, .confusion-matrix-table td {
+            border: 1px solid #e5e7eb; padding: 0.6rem 0.8rem; text-align: left;
+            white-space: nowrap; /* Prevent text wrapping in cells */
+        }
+        .results-table th, .confusion-matrix-table th { 
+            background-color: #f9fafb; /* Lighter header */
+            font-weight: 600; 
+            position: sticky; /* Sticky header for table scroll */
+            top: 0;
+            z-index: 10;
+        }
+        .results-table td.predicted-class-cell { font-weight: bold; color: #1e40af; } /* Darker blue for prediction */
+        .confusion-matrix-table td, .confusion-matrix-table th { text-align: center; }
+        .confusion-matrix-table th.true-label-header { font-style: italic; text-align:left; background-color: #f3f4f6; }
+        
+        .message-box { padding: 1rem; border-radius: 8px; margin-top: 1.5rem; font-size: 0.9rem; text-align: center; }
+        .message-info { background-color: #e0f2fe; border: 1px solid #7dd3fc; color: #075985; }
+        .message-error { background-color: #fee2e2; border: 1px solid #fca5a5; color: #991b1b; }
+        .loader {
+            border: 5px solid #e5e7eb; border-top: 5px solid #2563eb; border-radius: 50%;
+            width: 40px; height: 40px; animation: spin 0.8s linear infinite; margin: 1.5rem auto; display: none;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        #metricsDisplayArea {
+            background-color: #eef2ff; /* Light indigo background */
+            border: 1px solid #c7d2fe; /* Indigo border */
+        }
+        #metricsDisplayArea h3 { color: #3730a3; } /* Darker indigo for heading */
+        #metricsContent { color: #4338ca; } /* Indigo text for content */
+        #metricsContent ul { padding-left: 0; list-style-type: none; }
+        #metricsContent li { padding: 0.3rem 0; border-bottom: 1px solid #e0e7ff; }
+        #metricsContent li:last-child { border-bottom: none; }
+        #metricsContent strong { color: #312e81; }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body class="bg-gray-100"> 
+    <div class="container">
+        <header class="text-center mb-10">
+            <h1 class="text-4xl font-bold text-gray-800">Hyperthyroid Prediction</h1>
+            <p class="text-gray-600 mt-3 text-lg">Upload a CSV file, select a model, and get predictions. If the CSV includes an 'hp_category' column, evaluation metrics will also be shown.</p>
+        </header>
+
+        <div class="space-y-8">
+            <div>
+                <label for="csvFileInput" class="file-input-label block hover:bg-gray-50">
+                    <svg class="mx-auto h-16 w-16 text-gray-400 mb-3" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true"><path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                    <span class="mt-2 block text-base font-medium file-input-text">Click to upload CSV</span>
+                    <span class="mt-1 block text-xs text-gray-500">Max file size: 5MB</span>
+                </label>
+                <input type="file" id="csvFileInput" class="hidden" accept=".csv">
+                <div id="fileNameDisplay" class="file-name text-center"></div>
+            </div>
+
+            <div>
+                <label for="modelSelect" class="block text-sm font-medium text-gray-700 mb-1">Select Model:</label>
+                <select id="modelSelect" class="mt-1 block w-full py-2.5 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                    <option value="catboost">CatBoost</option>
+                    <option value="xgboost">XGBoost</option>
+                    <option value="random_forest">Random Forest</option>
+                    <option value="lightgbm">LightGBM</option>
+                    <option value="gradient_boosting">Gradient Boosting</option>
+                </select>
+            </div>
+
+            <button id="predictButton" class="btn-predict" disabled>
+                <svg id="predictButtonIcon" class="inline-block h-5 w-5 mr-2 -ml-1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                    <path fill-rule="evenodd" d="M2.25 10a.75.75 0 01.75-.75h8.44l-2.12-2.12a.75.75 0 111.06-1.06l3.5 3.5a.75.75 0 010 1.06l-3.5 3.5a.75.75 0 11-1.06-1.06l2.12-2.12H3a.75.75 0 01-.75-.75zM15.25 4.5a.75.75 0 01.75.75v9.5a.75.75 0 01-1.5 0V5.25a.75.75 0 01.75-.75z" clip-rule="evenodd" />
+                  </svg>
+                Predict
+            </button>
+            <div id="loader" class="loader"></div>
+            <div id="messageArea" class="message-box" style="display: none;"></div>
+
+            <div id="metricsDisplayArea" class="mt-8 p-5 bg-indigo-50 border border-indigo-200 rounded-lg shadow-md" style="display: none;">
+                <h3 class="text-2xl font-semibold text-indigo-800 mb-4">Evaluation Metrics</h3>
+                <div id="metricsContent" class="text-indigo-700 space-y-2"></div>
+            </div>
+
+            <div id="resultsArea" class="mt-8">
+                <h2 class="text-2xl font-semibold text-gray-700 mb-4">Prediction Results</h2>
+                <div id="resultsContent" class="bg-white p-1 rounded-md min-h-[150px] text-gray-600 shadow">
+                    <p class="p-4 text-center">Please upload a CSV file, select a model, and click "Predict".</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const csvFileInput = document.getElementById('csvFileInput');
+        const fileNameDisplay = document.getElementById('fileNameDisplay');
+        const modelSelect = document.getElementById('modelSelect');
+        const predictButton = document.getElementById('predictButton');
+        const resultsContent = document.getElementById('resultsContent');
+        const messageArea = document.getElementById('messageArea');
+        const loader = document.getElementById('loader');
+        const metricsDisplayArea = document.getElementById('metricsDisplayArea');
+        const metricsContent = document.getElementById('metricsContent');
+        let uploadedFile = null;
+
+        function showMessage(message, type = 'info') {
+            messageArea.innerHTML = escapeHtml(message); // Use innerHTML for potential formatting, ensure message is escaped
+            messageArea.className = `message-box ${type === 'error' ? 'message-error' : 'message-info'}`;
+            messageArea.style.display = 'block';
+        }
+        function hideMessage() { messageArea.style.display = 'none'; }
+
+        csvFileInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                if (file.type !== 'text/csv') {
+                    showMessage('Invalid file type. Please upload a CSV file.', 'error');
+                    csvFileInput.value = ''; fileNameDisplay.textContent = ''; predictButton.disabled = true; uploadedFile = null; return;
+                }
+                if (file.size > 5 * 1024 * 1024) { 
+                    showMessage('File is too large. Maximum size is 5MB.', 'error');
+                    csvFileInput.value = ''; fileNameDisplay.textContent = ''; predictButton.disabled = true; uploadedFile = null; return;
+                }
+                fileNameDisplay.textContent = `Selected file: ${file.name}`;
+                predictButton.disabled = false; hideMessage();
+                resultsContent.innerHTML = '<p class="p-4 text-center">File loaded. Select a model and click "Predict".</p>';
+                metricsDisplayArea.style.display = 'none'; 
+                uploadedFile = file; 
+            } else {
+                fileNameDisplay.textContent = ''; predictButton.disabled = true; uploadedFile = null;
+            }
+        });
+
+        predictButton.addEventListener('click', async () => {
+            if (!uploadedFile) { showMessage('No file selected. Please upload a CSV file.', 'error'); return; }
+
+            hideMessage(); loader.style.display = 'block';
+            resultsContent.innerHTML = ''; metricsDisplayArea.style.display = 'none'; metricsContent.innerHTML = '';
+            predictButton.disabled = true; 
+
+            const formData = new FormData(); 
+            formData.append('file', uploadedFile);
+            formData.append('model_id', modelSelect.value); // Add selected model_id
+
+            try {
+                const response = await fetch('/predict', { method: 'POST', body: formData });
+                loader.style.display = 'none'; predictButton.disabled = false; 
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ error: `HTTP error! Status: ${response.status}` }));
+                    throw new Error(errorData.error || `Server error: ${response.status}`);
+                }
+                const result = await response.json();
+
+                if (result.error) {
+                    showMessage(`Prediction Error: ${result.error}`, 'error');
+                } else if (result.predictions && result.headers) {
+                    showMessage(`Predictions received successfully using ${escapeHtml(result.model_used || 'selected')} model!`, 'info');
+                    displayResults(result.predictions, result.headers);
+
+                    if (result.metrics) {
+                        let metricsHtml = '<ul>';
+                        if (result.metrics.message) {
+                            metricsHtml += `<li class="mb-2"><em>${escapeHtml(result.metrics.message)}</em></li>`;
+                        }
+                        if (result.metrics.error) {
+                            metricsHtml += `<li class="text-red-600">Error calculating metrics: ${escapeHtml(result.metrics.error)}</li>`;
+                        } else if (result.metrics.accuracy) { 
+                            metricsHtml += `<li><strong>Accuracy:</strong> ${escapeHtml(result.metrics.accuracy)}</li>`;
+                            metricsHtml += `<li><strong>Precision (Macro):</strong> ${escapeHtml(result.metrics.precision_macro)}</li>`;
+                            metricsHtml += `<li><strong>Sensitivity/Recall (Macro):</strong> ${escapeHtml(result.metrics.sensitivity_macro)}</li>`;
+                            metricsHtml += `<li><strong>Specificity (Macro):</strong> ${escapeHtml(result.metrics.specificity_macro)}</li>`;
+                            metricsHtml += `<li><strong>F1-score (Macro):</strong> ${escapeHtml(result.metrics.f1_macro)}</li>`;
+                        }
+                        if (result.metrics.confusion_matrix && result.metrics.cm_labels) {
+                            metricsHtml += '<li class="mt-3 mb-1"><strong>Confusion Matrix:</strong></li>';
+                            metricsHtml += '<li><div class="metrics-table-container"><table class="confusion-matrix-table">'; 
+                            metricsHtml += '<thead><tr><th class="true-label-header">True &darr; | Pred. &rarr;</th>';
+                            result.metrics.cm_labels.forEach(label => {
+                                metricsHtml += `<th>${escapeHtml(String(label))}</th>`;
+                            });
+                            metricsHtml += '</tr></thead>';
+                            metricsHtml += '<tbody>';
+                            result.metrics.confusion_matrix.forEach((row, i) => {
+                                metricsHtml += '<tr>';
+                                metricsHtml += `<td><strong>${escapeHtml(String(result.metrics.cm_labels[i]))}</strong></td>`;
+                                row.forEach(cellValue => {
+                                    metricsHtml += `<td>${escapeHtml(String(cellValue))}</td>`;
+                                });
+                                metricsHtml += '</tr>';
+                            });
+                            metricsHtml += '</tbody></table></div></li>';
+                        }
+                        metricsHtml += '</ul>';
+                        metricsContent.innerHTML = metricsHtml;
+                        metricsDisplayArea.style.display = 'block';
+                    } else {
+                        metricsDisplayArea.style.display = 'none';
+                    }
+                } else {
+                    showMessage('Received an unexpected response from the server.', 'error');
+                }
+            } catch (error) {
+                loader.style.display = 'none'; predictButton.disabled = false;
+                console.error('Fetch error:', error);
+                showMessage(`Error communicating with server: ${error.message}`, 'error');
+                metricsDisplayArea.style.display = 'none';
+            }
+        });
+
+        function displayResults(predictionsArray, headersArray) {
+            let outputHtml = '<div class="results-table-container"><table class="results-table">'; // Wrap table for scrolling
+            outputHtml += '<thead><tr>';
+            headersArray.forEach(header => { outputHtml += `<th>${escapeHtml(header)}</th>`; });
+            outputHtml += '</tr></thead>';
+            outputHtml += '<tbody>';
+            predictionsArray.forEach(rowObject => {
+                outputHtml += '<tr>';
+                headersArray.forEach(header => {
+                    const value = rowObject[header] !== undefined && rowObject[header] !== null ? rowObject[header] : '';
+                    const cellClass = header === 'Predicted_Class' ? ' class="predicted-class-cell"' : '';
+                    outputHtml += `<td${cellClass}>${escapeHtml(value.toString())}</td>`;
+                });
+                outputHtml += '</tr>';
+            });
+            outputHtml += '</tbody></table></div>';
+            resultsContent.innerHTML = outputHtml;
+        }
+
+        function escapeHtml(unsafe) {
+            if (typeof unsafe !== 'string') {
+                if (unsafe === null || unsafe === undefined) return '';
+                unsafe = unsafe.toString();
+            }
+            return unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+    </script>
+</body>
+</html>
